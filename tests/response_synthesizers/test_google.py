@@ -21,7 +21,10 @@ if has_google:
     import llama_index.vector_stores.google.generativeai.genai_extension as genaix
 
     genaix.set_defaults(
-        genaix.Config(api_endpoint="No-such-endpoint-to-prevent-hitting-real-backend")
+        genaix.Config(
+            api_endpoint="No-such-endpoint-to-prevent-hitting-real-backend",
+            testing=True,
+        )
     )
 
 

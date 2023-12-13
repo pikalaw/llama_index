@@ -27,7 +27,10 @@ if has_google:
 
     # Make sure the tests do not hit actual production servers.
     genaix.set_defaults(
-        genaix.Config(api_endpoint="No-such-endpoint-to-prevent-hitting-real-backend")
+        genaix.Config(
+            api_endpoint="No-such-endpoint-to-prevent-hitting-real-backend",
+            testing=True,
+        )
     )
 
 
@@ -225,7 +228,10 @@ def test_add(
 @pytest.mark.skipif(not has_google, reason=SKIP_TEST_REASON)
 @patch("google.ai.generativelanguage.RetrieverServiceClient.delete_document")
 @patch("google.ai.generativelanguage.RetrieverServiceClient.get_corpus")
-def test_delete(mock_get_corpus: MagicMock, mock_delete_document: MagicMock) -> None:
+def test_delete(
+    mock_get_corpus: MagicMock,
+    mock_delete_document: MagicMock,
+) -> None:
     # Arrange
     mock_get_corpus.return_value = genai.Corpus(name="corpora/123")
 
@@ -244,7 +250,10 @@ def test_delete(mock_get_corpus: MagicMock, mock_delete_document: MagicMock) -> 
 @pytest.mark.skipif(not has_google, reason=SKIP_TEST_REASON)
 @patch("google.ai.generativelanguage.RetrieverServiceClient.query_corpus")
 @patch("google.ai.generativelanguage.RetrieverServiceClient.get_corpus")
-def test_query(mock_get_corpus: MagicMock, mock_query_corpus: MagicMock) -> None:
+def test_query(
+    mock_get_corpus: MagicMock,
+    mock_query_corpus: MagicMock,
+) -> None:
     # Arrange
     mock_get_corpus.return_value = genai.Corpus(name="corpora/123")
     mock_query_corpus.return_value = genai.QueryCorpusResponse(
