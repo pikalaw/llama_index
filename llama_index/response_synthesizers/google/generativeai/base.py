@@ -7,7 +7,7 @@ https://developers.generativeai.google/guide
 """
 
 import logging
-from typing import Any, List, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, cast
 
 from llama_index.bridge.pydantic import BaseModel  # type: ignore
 from llama_index.callbacks.schema import CBEventType, EventPayload
@@ -18,6 +18,10 @@ from llama_index.response_synthesizers.base import BaseSynthesizer, QueryTextTyp
 from llama_index.schema import MetadataMode, NodeWithScore, TextNode
 from llama_index.types import RESPONSE_TEXT_TYPE
 from llama_index.vector_stores.google.generativeai import google_service_context
+
+if TYPE_CHECKING:
+    import google.ai.generativelanguage as genai
+
 
 _logger = logging.getLogger(__name__)
 _import_err_msg = "`google.generativeai` package not found, please run `pip install google-generativeai`"
@@ -34,7 +38,7 @@ class SynthesizedResponse(BaseModel):
     """The list of passages the AQA model used for its response."""
 
     answerable_probability: float
-    """The probability of the question being answered from the provided passages."""
+    """The model's estimate of the probability that its answer is correct and grounded in the input passages."""
 
 
 class GoogleTextSynthesizer(BaseSynthesizer):
@@ -46,17 +50,24 @@ class GoogleTextSynthesizer(BaseSynthesizer):
     """
 
     _client: Any
-    _answer_style: int
+    _temperature: float
+    _answer_style: Any
+    _safety_setting: List[Any]
 
-    def __init__(self, answer_style: int = 1, **kwargs: Any):
+    def __init__(
+        self,
+        *,
+        temperature: float,
+        answer_style: Any,
+        safety_setting: List[Any],
+        **kwargs: Any,
+    ):
         """Create a new Google AQA.
 
-        Args:
-          answer_style: See `google.ai.generativelanguage.AnswerStyle`
+        Prefer to use the factory `from_defaults` instead for type safety.
+        See `from_defaults` for more documentation.
         """
         try:
-            import google.ai.generativelanguage as genai
-
             import llama_index.vector_stores.google.generativeai.genai_extension as genaix
         except ImportError:
             raise ImportError(_import_err_msg)
@@ -66,8 +77,48 @@ class GoogleTextSynthesizer(BaseSynthesizer):
             output_cls=SynthesizedResponse,
             **kwargs,
         )
-        self._client = genaix.build_text_service()
-        self._answer_style = genai.AnswerStyle(answer_style)
+
+        self._client = genaix.build_generative_service()
+        self._temperature = temperature
+        self._answer_style = answer_style
+        self._safety_setting = safety_setting
+
+    # Type safe factory that is only available if Google is installed.
+    @classmethod
+    def from_defaults(
+        cls,
+        temperature: float = 0.7,
+        answer_style: int = 1,
+        safety_setting: List["genai.SafetySetting"] = [],
+    ) -> "GoogleTextSynthesizer":
+        """Create a new Google AQA.
+
+        Example:
+          responder = GoogleTextSynthesizer.create(
+              temperature=0.7,
+              answer_style=AnswerStyle.ABSTRACTIVE,
+              safety_setting=[
+                  SafetySetting(
+                      category=HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                      threshold=HarmBlockThreshold.BLOCK_LOW_AND_ABOVE,
+                  ),
+              ]
+          )
+
+        Args:
+          temperature: 0.0 to 1.0.
+          answer_style: See `google.ai.generativelanguage.GenerateAnswerRequest.AnswerStyle`
+            The default is ABSTRACTIVE (1).
+          safety_setting: See `google.ai.generativelanguage.SafetySetting`.
+
+        Returns:
+          an instance of GoogleTextSynthesizer.
+        """
+        return cls(
+            temperature=temperature,
+            answer_style=answer_style,
+            safety_setting=safety_setting,
+        )
 
     def get_response(
         self,
@@ -102,11 +153,13 @@ GoogleTextSynthesizer.get_response(
     {response_kwargs})"""
         )
 
-        client = cast(genai.TextServiceClient, self._client)
-        response = genaix.generate_text_answer(
+        client = cast(genai.GenerativeServiceClient, self._client)
+        response = genaix.generate_answer(
             prompt=query_str,
             passages=list(text_chunks),
-            answer_style=genai.AnswerStyle(self._answer_style),
+            answer_style=self._answer_style,
+            safety_settings=self._safety_setting,
+            temperature=self._temperature,
             client=client,
         )
 
@@ -145,8 +198,9 @@ GoogleTextSynthesizer.get_response(
             a score from the retrieval.
 
             Response's `metadata` may also have have an entry with key
-            `answerable_probability`, which is the probability that the grounded
-            answer is likely correct.
+            `answerable_probability`, which is the model's estimate of the
+            probability that its answer is correct and grounded in the input
+            passages.
         """
         if len(nodes) == 0:
             return Response("Empty Response")
