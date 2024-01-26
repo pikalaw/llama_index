@@ -541,7 +541,13 @@ def generate_answer(
         )
     )
 
-    if response.answer.finish_reason != genai.Candidate.FinishReason.STOP:
+    # Temporary workaround until the fix for finish_reason is rolled out.
+    # The workaround is to check that there is some text in the output.
+    # Note that this is not a replacement, because the output could be invalid
+    # for a variety of reasons, e.g. maximum context window reached or safety
+    # violation. In another word, if you do get output, that output may yet be
+    # invalid. Use this in development only! Do not deploy to production!
+    if len(response.answer.content.parts) == 0:
         finish_message = _get_finish_message(response.answer)
         raise GenerateAnswerError(
             finish_reason=response.answer.finish_reason,
